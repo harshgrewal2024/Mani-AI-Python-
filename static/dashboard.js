@@ -44,3 +44,25 @@ fetch("/resume-history")
         box.appendChild(div);
     });
 });
+
+// 🔥 ANALYTICS
+fetch("/analytics")
+.then(res => res.json())
+.then(data => {
+
+    document.getElementById("totalChats").innerText =
+        data.total_chats;
+
+    document.getElementById("totalResumes").innerText =
+        data.total_resumes;
+
+    document.getElementById("avgScore").innerText =
+        data.avg_score;
+
+    document.getElementById("highestScore").innerText =
+        data.highest_score;
+
+})
+.catch(err => {
+    console.log("Analytics Error:", err);
+});

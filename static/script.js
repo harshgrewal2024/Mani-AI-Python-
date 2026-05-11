@@ -1,4 +1,6 @@
 // ================= GLOBAL FUNCTION =================
+let latestSections = {};
+
 function addMessage(text, type) {
   let box = document.createElement("div");
 
@@ -83,51 +85,179 @@ if (form) {
     })
       .then((res) => res.json())
       .then((data) => {
+    let scoreBox = document.getElementById("score");
+    let bar = document.getElementById("progressBar");
 
-        // ❌ error
-        if (data.error) {
-          scoreBox.innerText = "❌ " + data.error;
-          scoreBox.className = "mt-4 text-red-400 font-semibold";
-          if (bar) bar.style.width = "0%";
-          return;
-        }
+    // ❌ error
+    if (data.error) {
+        scoreBox.innerText = "❌ " + data.error;
+        scoreBox.className = "mt-4 text-red-400 font-semibold";
+        if (bar) bar.style.width = "0%";
+        return;
+    }
 
-        let score = data.score;
+    // 🔥 AI RESPONSE SHOW (MAIN FIX)
+    scoreBox.className = "mt-4 text-gray-200 whitespace-pre-line";
+let text = data.response.replace(/\*\*/g, "");
 
-        // 🎨 Score color
-        let color = "text-red-400";
-        if (score >= 70) color = "text-green-400";
-        else if (score >= 50) color = "text-yellow-400";
+// 🔥 sections split
+latestSections = {
 
-        // 🔥 MAIN HTML
-        let html = `
-          <div class="${color} font-bold text-lg mb-2">
-            🔥 Score: ${score}/100
-          </div>
-        `;
+    score: "",
+    strengths: "",
+    weaknesses: "",
+    improvements: "",
+    roles: ""
 
-        // ✅ Strengths
-        if (data.found && data.found.length > 0) {
-          html += `<div class="text-green-400 mb-2">✅ Strengths:</div>`;
-          data.found.forEach((item) => {
-            html += `<div class="text-sm text-gray-300">✔ ${item}</div>`;
-          });
-        }
+};
 
-        // ⚠️ Suggestions
-        if (data.suggestions && data.suggestions.length > 0) {
-          html += `<div class="text-yellow-400 mt-3 mb-2">⚠️ Improvements:</div>`;
-          data.suggestions.forEach((item) => {
-            html += `<div class="text-sm text-gray-300">➤ ${item}</div>`;
-          });
-        }
+let sections = latestSections;
 
-        scoreBox.className = "mt-4";
-        scoreBox.innerHTML = html;
+let current = "";
 
-        // 📊 progress bar
-        if (bar) bar.style.width = score + "%";
-      })
+text.split("\n").forEach(line => {
+    line = line.trim();
+
+    if (line.toLowerCase().includes("score")) current = "score";
+    else if (line.toLowerCase().includes("strength")) current = "strengths";
+    else if (line.toLowerCase().includes("weakness")) current = "weaknesses";
+    else if (line.toLowerCase().includes("improvement")) current = "improvements";
+    else if (line.toLowerCase().includes("role")) current = "roles";
+
+    if (current && line !== "") {
+    sections[current] += line + " ";
+}
+});
+
+
+// 🎨 PREMIUM FINAL UI
+let scoreNumber = sections.score.match(/\d+/);
+
+scoreNumber = scoreNumber ? scoreNumber[0] : 0;
+scoreBox.innerHTML = `
+<div class="space-y-5">
+
+    <!-- SCORE CARD -->
+   
+<div class="bg-[#101826]
+border border-orange-500/20
+rounded-2xl px-6 py-5">
+
+ <div class="flex items-center justify-between gap-4 flex-wrap">
+
+        <div>
+
+            <p class="text-orange-400 text-xs tracking-[4px] uppercase">
+                ATS Resume Score
+            </p>
+
+            <div class="flex items-end gap-2 mt-3">
+
+                <h1 class="text-5xl font-black text-white leading-none">
+                    ${scoreNumber}
+                </h1>
+
+                <span class="text-xl text-gray-400 mb-1">
+                    /100
+                </span>
+
+            </div>
+
+            <p class="text-gray-500 text-sm mt-2">
+                AI Powered Resume Analysis
+            </p>
+
+        </div>
+
+        <!-- SIMPLE SCORE -->
+        <div class="w-20 h-20 rounded-full
+        border-[6px] border-orange-500
+        flex items-center justify-center">
+
+            <span class="text-lg font-bold text-white">
+                ${scoreNumber}%
+            </span>
+
+        </div>
+
+    </div>
+
+</div>
+
+    <!-- STRENGTHS -->
+    <div class="bg-[#0f172a] border border-green-500/20
+   rounded-2xl px-5 py-4">
+
+        <h3 class="text-green-400 text-lg font-semibold mb-3">
+            💪 Strengths
+        </h3>
+
+        <p class="text-gray-300 text-[15px] leading-7">
+            ${sections.strengths.replace("Strengths:", "").trim()}
+        </p>
+
+    </div>
+
+    <!-- WEAKNESSES -->
+    <div class="bg-[#0f172a] border border-red-500/20
+    rounded-2xl px-5 py-4">
+
+        <h3 class="text-red-400 text-lg font-semibold mb-3">
+            ⚠ Weaknesses
+        </h3>
+
+        <p class="text-gray-300 text-sm leading-7">
+            ${sections.weaknesses.replace("Weaknesses:", "").trim()}
+        </p>
+
+    </div>
+
+    <!-- IMPROVEMENTS -->
+    <div class="bg-[#0f172a] border border-yellow-500/20
+    rounded-2xl px-5 py-4">
+
+        <h3 class="text-yellow-300 text-lg font-semibold mb-3">
+            🚀 Improvements
+        </h3>
+
+        <p class="text-gray-300 text-sm leading-7">
+            ${sections.improvements.replace("Improvements:", "").trim()}
+        </p>
+
+    </div>
+
+    <!-- ROLES -->
+    <div class="bg-[#0f172a] border border-blue-500/20
+    rounded-2xl p-5 py-4">
+
+        <h3 class="text-blue-400 text-lg font-semibold mb-3">
+            🎯 Suitable Roles
+        </h3>
+
+        <p class="text-gray-300 text-sm leading-7">
+            ${sections.roles.replace("Suitable Job Roles:", "").trim()}
+        </p>
+
+    </div>
+
+    <button onclick="downloadReport()"
+
+class="w-full py-3 rounded-xl
+bg-orange-500 hover:bg-orange-600
+transition duration-300
+text-white font-semibold text-sm">
+
+    Download Report
+
+</button>
+
+</div>
+`;
+
+    // 🎯 progress bar remove ya fixed rakho
+    if (bar) bar.style.width = "100%";
+})
+     
       .catch(() => {
         scoreBox.innerText = "❌ Server error 😅";
         scoreBox.className = "mt-4 text-red-400 font-semibold";
@@ -224,3 +354,96 @@ function typingEffect(text) {
 
     type();
 }
+
+
+function downloadReport() {
+
+    let report = `
+ATS RESUME SCORE
+${latestSections.score}
+
+====================================
+
+STRENGTHS
+${latestSections.strengths}
+
+====================================
+
+WEAKNESSES
+${latestSections.weaknesses}
+
+====================================
+
+IMPROVEMENTS
+${latestSections.improvements}
+
+====================================
+
+SUITABLE JOB ROLES
+${latestSections.roles}
+
+====================================
+
+Generated By AI Smart Assistant
+`;
+
+    fetch("/download-report", {
+
+        method: "POST",
+
+        headers: {
+            "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+            content: report
+        })
+
+    })
+
+    .then(res => res.blob())
+
+    .then(blob => {
+
+        let url = window.URL.createObjectURL(blob);
+
+        let a = document.createElement("a");
+
+        a.href = url;
+
+        a.download = "Resume_Report.pdf";
+
+        a.click();
+
+    });
+
+}
+
+// 🎤 VOICE INPUT
+function startVoice() {
+
+    const recognition =
+        new(window.SpeechRecognition ||
+            window.webkitSpeechRecognition)();
+
+    recognition.lang = "en-US";
+
+    recognition.start();
+
+    recognition.onstart = () => {
+        console.log("Voice started...");
+    };
+
+    recognition.onresult = (event) => {
+
+        const text =
+            event.results[0][0].transcript;
+
+        document.getElementById("msg").value = text;
+    };
+
+    recognition.onerror = (event) => {
+        console.log("Voice Error:", event.error);
+    };
+}
+

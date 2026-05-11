@@ -1,12 +1,32 @@
+from dotenv import load_dotenv
+import os
 from flask import Flask, render_template, request, redirect, session, jsonify
 from flask_sqlalchemy import SQLAlchemy
 import requests
-import PyPDF2
+
 from werkzeug.security import generate_password_hash, check_password_hash
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from flask import send_file
+import re
+import PyPDF2
+
+load_dotenv()
 
 
 app = Flask(__name__)
-app.secret_key = "my_secret_123"
+
+# ✅ SECRET KEY FIX
+app.secret_key = os.getenv("SECRET_KEY")
+
+# ✅ API KEY FIX
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+
+if app.secret_key is None:
+    print("❌ SECRET KEY NOT LOADED")
+
+if OPENROUTER_API_KEY is None:
+    print("❌ API KEY NOT LOADED")
 
 # ================= DB =================
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db.sqlite3'
@@ -83,8 +103,6 @@ def logout():
 
 
 # ================= 🔥 CHAT (REAL AI) =================
-OPENROUTER_API_KEY = "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"
-
 
 @app.route("/chat", methods=["POST"])
 def chat():
@@ -140,6 +158,35 @@ def chat():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# Dowload report
+
+
+@app.route("/download-report", methods=["POST"])
+def download_report():
+    data = request.get_json()
+    content = data.get("content")
+
+    # 🔥 REMOVE EMOJIS FOR CLEAN PDF
+    content = content.replace("💪", "")
+    content = content.replace("⚠", "")
+    content = content.replace("🚀", "")
+    content = content.replace("🎯", "")
+    content = content.replace("📥", "")
+
+    file_path = "report.pdf"
+
+    doc = SimpleDocTemplate(file_path)
+    styles = getSampleStyleSheet()
+
+    story = []
+
+    for line in content.split("\n"):
+        story.append(Paragraph(line, styles["BodyText"]))
+        story.append(Spacer(1, 6))
+
+    doc.build(story)
+
+    return send_file(file_path, as_attachment=True)
 # ================= RESUME =================
 
 
@@ -154,74 +201,103 @@ def resume():
         return jsonify({"error": "No file uploaded"}), 400
 
     try:
+        # 📄 PDF READ
         pdf_reader = PyPDF2.PdfReader(file)
         text = ""
 
         for page in pdf_reader.pages:
-            text += page.extract_text() or ""
+            if page.extract_text():
+                text += page.extract_text()
 
-        text = text.lower()
+        # 🔥 AI PROMPT
+        prompt = f"""
+You are an expert ATS Resume Analyzer and Career Coach.
 
-        # 🔥 KEYWORDS
-        keywords = {
-            "python": "Good Python knowledge ✅",
-            "java": "Java skills detected 👍",
-            "sql": "Database knowledge present 🗄️",
-            "project": "Projects mentioned 🚀",
-            "experience": "Experience section present 💼",
-            "react": "Frontend skill React ⚛️",
-            "flask": "Backend Flask skill 🔥",
-            "api": "API knowledge present 🌐",
-            "github": "Good use of GitHub 🧑‍💻"
-        }
+Analyze the following resume professionally.
 
-        score = 0
-        found = []
+Return response ONLY in this format:
 
-        for key, msg in keywords.items():
-            if key in text:
-                score += 10
-                found.append(msg)
+Score: XX/100
 
-        score = min(score, 100)
+Strengths:
+- point
+- point
+- point
 
-        # 🔥 Suggestions
-        suggestions = []
+Weaknesses:
+- point
+- point
+- point
 
-        if "project" not in text:
-            suggestions.append("Add at least 2 strong projects 🚀")
+Improvements:
+- point
+- point
+- point
 
-        if "experience" not in text:
-            suggestions.append("Mention internships or experience 💼")
+Suitable Job Roles:
+- role
+- role
+- role
 
-        if "react" not in text:
-            suggestions.append("Add frontend skills like React ⚛️")
+ATS Analysis:
+- Formatting
+- Keywords
+- Technical Skills
+- Projects
+- Communication
 
-        if "api" not in text:
-            suggestions.append("Mention API or backend integration 🌐")
+Resume Content:
+{text}
 
-        if "github" not in text:
-            suggestions.append("Add GitHub profile link 🧑‍💻")
+"""
 
-        # ✅ SAVE RESUME HISTORY (सही जगह)
+        # 🤖 API CALL
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "meta-llama/llama-3-8b-instruct",
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ]
+            }
+        )
+
+        result = response.json()
+
+        # ❌ error handle
+        if "error" in result:
+            return jsonify({"error": result["error"]["message"]})
+
+        # ✅ AI response
+        reply = result["choices"][0]["message"]["content"]
+
+        # 💾 SAVE IN DB (optional but recommended)
+                # 💾 EXTRACT SCORE
+        score_match = re.search(r'(\d+)', reply)
+
+        score = int(score_match.group(1)) if score_match else 0
+
+        # 💾 SAVE IN DATABASE
         resume_data = Resume(
             user_email=session["user"],
             score=score,
-            suggestions=" | ".join(suggestions)
+            suggestions=reply
         )
 
+ 
         db.session.add(resume_data)
         db.session.commit()
 
-        return jsonify({
-            "score": score,
-            "found": found,
-            "suggestions": suggestions
-        })
+        return jsonify({"response": reply})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 # dashboard
+
 
 @app.route("/dashboard")
 def dashboard():
@@ -230,6 +306,8 @@ def dashboard():
     return render_template("dashboard.html")
 
 # history
+
+
 @app.route("/history")
 def history():
     if "user" not in session:
@@ -253,6 +331,7 @@ def chat_page():
         return redirect("/login")
     return render_template("index.html")
 
+
 @app.route("/resume-history")
 def resume_history():
     if "user" not in session:
@@ -266,7 +345,46 @@ def resume_history():
             "suggestions": r.suggestions
         } for r in data
     ])
-    
+
+
+
+# ================= Analytics =================
+
+
+@app.route("/analytics")
+def analytics():
+
+    if "user" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    user_email = session["user"]
+
+    chats = Chat.query.filter_by(user_email=user_email).count()
+
+    resumes = Resume.query.filter_by(user_email=user_email).all()
+
+    total_resumes = len(resumes)
+
+    scores = []
+
+    for r in resumes:
+        try:
+            scores.append(int(r.score))
+        except:
+            pass
+
+    avg_score = round(sum(scores) / len(scores), 1) if scores else 0
+
+    highest_score = max(scores) if scores else 0
+
+    return jsonify({
+        "total_chats": chats,
+        "total_resumes": total_resumes,
+        "avg_score": avg_score,
+        "highest_score": highest_score
+    })
+
+
 # ================= RUN =================
 if __name__ == "__main__":
     with app.app_context():
